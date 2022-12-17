@@ -2,13 +2,14 @@ use std::marker::PhantomData;
 
 use cranelift::prelude::*;
 
-use crate::expr::{VariableValue, Arg, Var, Wrap, ExprType};
-use crate::jit::{CraneliftArgs, CraneliftVars};
+use crate::expr::{Arg, ExprType, Var, VariableValue, Wrap};
 use crate::jit::CraneliftValue;
+use crate::jit::{CraneliftArgs, CraneliftVars};
 
 pub trait ArgTuple: std::marker::Tuple {
     type Args<Vars: VarTuple>;
     fn args<Vars: VarTuple>() -> Self::Args<Vars>;
+    fn filtered_eq(&self, other: &Self, mask: &[bool]) -> bool;
 }
 
 pub trait VarTuple {
@@ -23,6 +24,10 @@ impl ArgTuple for () {
     #[inline(always)]
     fn args<Vars: VarTuple>() -> Self::Args<Vars> {
         ()
+    }
+    #[inline(always)]
+    fn filtered_eq(&self, _other: &Self, _mask: &[bool]) -> bool {
+        true
     }
 }
 
@@ -90,7 +95,7 @@ macro_rules! impl_tuple {
                 ),*,)
             }
         }
-        impl<$($typename: CraneliftValue),*> ArgTuple for tuple!() {
+        impl<$($typename: CraneliftValue + Eq),*> ArgTuple for tuple!() {
             type Args<Vars: VarTuple> = ($(Wrap<Self, Vars, Arg<Self, $typename, $structname>>),*,);
             #[inline(always)]
             fn args<Vars: VarTuple>() -> Self::Args<Vars> {
@@ -100,6 +105,14 @@ macro_rules! impl_tuple {
                         _sig: PhantomData,
                     })
                 ),*,)
+            }
+            #[inline(always)]
+            fn filtered_eq(&self, other: &Self, mask: &[bool]) -> bool {
+                let mut ret = true;
+                $(
+                ret &= !mask[$num] || $structname::project_ref(self) == $structname::project_ref(other);
+                )*
+                ret
             }
         }
         impl<$($typename: CraneliftValue + VariableValue),*> CraneliftVars for tuple!() {
@@ -112,7 +125,7 @@ macro_rules! impl_tuple {
                 ret
             }
         }
-        impl<$($typename: CraneliftValue),*> CraneliftArgs for tuple!() {
+        impl<$($typename: CraneliftValue + Eq),*> CraneliftArgs for tuple!() {
             type Function<Out> = fn($($typename),*) -> Out;
             fn as_cranelift_arguments() -> Vec<Option<(AbiParam, ExprType)>> {
                 let mut ret = vec![];

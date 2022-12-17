@@ -200,6 +200,7 @@ pub enum ExprType {
     USize,
     I128,
     U128,
+    Slice,
 }
 impl ExprType {
     pub fn as_cranelift_type(self) -> Option<Type> {
@@ -211,6 +212,7 @@ impl ExprType {
             ExprType::I32 | ExprType::U32 => types::I32,
             ExprType::I64 | ExprType::U64 | ExprType::ISize | ExprType::USize => types::I64,
             ExprType::I128 | ExprType::U128 => types::I128,
+            ExprType::Slice => types::I128,
         })
     }
     pub fn is_signed(&self) -> bool {
@@ -222,7 +224,8 @@ impl ExprType {
             | ExprType::U32
             | ExprType::U64
             | ExprType::USize
-            | ExprType::U128 => false,
+            | ExprType::U128
+            | ExprType::Slice => false,
             ExprType::I8
             | ExprType::I16
             | ExprType::I32
@@ -246,6 +249,11 @@ impl ExprValue for bool {
 impl<C: ExprValue> ExprValue for &C {
     fn ty() -> ExprType {
         ExprType::I64
+    }
+}
+impl<C: ExprValue> ExprValue for &[C] {
+    fn ty() -> ExprType {
+        ExprType::Slice
     }
 }
 impl<C: ExprValue + Default> VariableValue for C {}

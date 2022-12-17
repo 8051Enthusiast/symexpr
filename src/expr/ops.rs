@@ -1,12 +1,14 @@
 use std::ops::*;
 
-use cranelift::prelude::{InstBuilder, IntCC, types};
+use cranelift::prelude::{types, InstBuilder, IntCC};
 
 use crate::{
     expr::{Expr, ExprType, Wrap},
     int::{Int, UsualArithmeticConverted},
-    jit::{CraneliftableExpr, CraneliftFunctionCreator},
+    jit::{CraneliftFunctionCreator, CraneliftableExpr},
 };
+
+use super::ExprValue;
 
 macro_rules! impl_arithmetic {
     ($name:ident, $trait:ident, $funname:ident $(, $insname:ident)?) => {
@@ -87,7 +89,9 @@ macro_rules! impl_arithmetic {
 
 macro_rules! impl_signed_op {
     ($name:ident, $signed:ident, $unsigned:ident) => {
-        impl<Sig, E: CraneliftableExpr<Sig>, F: CraneliftableExpr<Sig>> CraneliftableExpr<Sig> for $name<E, F> {
+        impl<Sig, E: CraneliftableExpr<Sig>, F: CraneliftableExpr<Sig>> CraneliftableExpr<Sig>
+            for $name<E, F>
+        {
             fn cranelift_eval<'a>(
                 &self,
                 ctx: &mut crate::jit::CraneliftFunctionCreator<Sig>,
@@ -224,7 +228,9 @@ macro_rules! impl_cmp {
 
 macro_rules! impl_cmp_op {
     (unsigned: $name:ident, $op:path) => {
-        impl<Sig, E: CraneliftableExpr<Sig>, F: CraneliftableExpr<Sig>> CraneliftableExpr<Sig> for $name<E, F> {
+        impl<Sig, E: CraneliftableExpr<Sig>, F: CraneliftableExpr<Sig>> CraneliftableExpr<Sig>
+            for $name<E, F>
+        {
             fn cranelift_eval<'a>(
                 &self,
                 ctx: &mut crate::jit::CraneliftFunctionCreator<Sig>,
@@ -238,7 +244,9 @@ macro_rules! impl_cmp_op {
         }
     };
     (signed: $name:ident, $sop:path, $uop:path) => {
-        impl<Sig, E: CraneliftableExpr<Sig>, F: CraneliftableExpr<Sig>> CraneliftableExpr<Sig> for $name<E, F> {
+        impl<Sig, E: CraneliftableExpr<Sig>, F: CraneliftableExpr<Sig>> CraneliftableExpr<Sig>
+            for $name<E, F>
+        {
             fn cranelift_eval<'a>(
                 &self,
                 ctx: &mut crate::jit::CraneliftFunctionCreator<Sig>,
@@ -326,7 +334,7 @@ macro_rules! impl_bool_op {
                 let right_block = ctx.builder.create_block();
                 ctx.builder.ins().$jop(left, right_block, &[]);
                 ctx.builder.seal_block(right_block);
-            
+
                 let after_block = ctx.builder.create_block();
                 let ret = ctx.builder.append_block_param(after_block, types::B1);
                 ctx.builder.ins().jump(after_block, &[left]);
@@ -343,3 +351,24 @@ macro_rules! impl_bool_op {
 
 impl_bool_op!(ExprAnd, and, &&, brnz);
 impl_bool_op!(ExprOr, or, ||, brz);
+
+#[derive(Copy, Clone)]
+pub struct Index<E, F> {
+    array: E,
+    index: F,
+}
+
+impl<'a, Sig, Vars, E, F, C> Expr<Sig, Vars> for Index<E, F>
+where
+    E: Expr<Sig, Vars, Output = &'a [C]>,
+    F: Expr<Sig, Vars, Output = usize>,
+    C: ExprValue + 'a,
+{
+    type Output = C;
+
+    fn eval(&self, sig: &Sig, vars: &mut Vars) -> Self::Output {
+        let array = self.array.eval(sig, vars);
+        let index = self.index.eval(sig, vars);
+        array[index]
+    }
+}

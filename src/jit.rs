@@ -101,14 +101,14 @@ pub struct CraneliftFunctionCreator<'a, Sig> {
     pub args: Vec<Option<Value>>,
     pub current_types: HashMap<Value, ExprType>,
     pub isa: &'a dyn TargetIsa,
-    pub specializations: Option<(Sig, Vec<bool>)>,
+    pub specializations: Option<(&'a Sig, Vec<bool>)>,
 }
 
 impl<'a, Sig> CraneliftFunctionCreator<'a, Sig> {
     pub fn from_fun_builder<'b, Vars: CraneliftVars>(
         mut builder: FunctionBuilder<'b>,
         isa: &'b dyn TargetIsa,
-        specializations: Option<(Sig, Vec<bool>)>,
+        specializations: Option<(&'b Sig, Vec<bool>)>,
     ) -> CraneliftFunctionCreator<'b, Sig>
     where
         Sig: CraneliftArgs,
@@ -211,15 +211,14 @@ where
         self.is_set[Lens::POS] = true;
         self
     }
-    pub fn build(self, jit: &mut CraneliftModule) -> SpecializedFunction<Sig, Vars, E>
-    where
-        Sig: Clone,
-    {
+    pub fn build(self, jit: &mut CraneliftModule) -> SpecializedFunction<Sig, Vars, E> {
+        let is_set = self.is_set.clone();
         let jit_fun = jit
-            .create_function(&self.expr.inner, Some((self.spec.clone(), self.is_set)))
+            .create_function(&self.expr.inner, Some((&self.spec, self.is_set)))
             .unwrap();
         SpecializedFunction {
             jit_fun,
+            is_set,
             rust_fun: self.expr,
             spec: self.spec,
         }
@@ -232,6 +231,7 @@ pub struct SpecializedFunction<
     E: CraneliftableExpr<Sig> + Expr<Sig, Vars>,
 > {
     spec: Sig,
+    is_set: Vec<bool>,
     jit_fun: Sig::Function<E::Output>,
     rust_fun: Wrap<Sig, Vars, E>,
 }
@@ -272,7 +272,7 @@ where
     Sig: Eq,
 {
     extern "rust-call" fn call(&self, args: Sig) -> Self::Output {
-        if args == self.spec {
+        if args.filtered_eq(&self.spec, &self.is_set) {
             self.jit_fun.call(args)
         } else {
             self.rust_fun.eval(&args)
@@ -292,7 +292,7 @@ impl CraneliftModule {
     pub fn create_function<Sig, Vars, E>(
         &mut self,
         expr: &E,
-        specializations: Option<(Sig, Vec<bool>)>,
+        specializations: Option<(&Sig, Vec<bool>)>,
     ) -> Result<Sig::Function<E::Output>, Box<dyn std::error::Error>>
     where
         Sig: CraneliftArgs,
