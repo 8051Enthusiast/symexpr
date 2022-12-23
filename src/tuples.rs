@@ -2,14 +2,20 @@ use std::marker::PhantomData;
 
 use cranelift::prelude::*;
 
-use crate::expr::{Arg, ExprType, Var, VariableValue, Wrap};
+use crate::expr::{Arg, Expr, ExprType, Var, VariableValue, Wrap};
 use crate::jit::CraneliftValue;
 use crate::jit::{CraneliftArgs, CraneliftVars};
 
-pub trait ArgTuple: std::marker::Tuple {
-    type Args<Vars: VarTuple>;
+pub trait ArgTuple: std::marker::Tuple + Sized {
+    type Args<Vars: VarTuple>: std::marker::Tuple;
     fn args<Vars: VarTuple>() -> Self::Args<Vars>;
-    fn filtered_eq(&self, other: &Self, mask: &[bool]) -> bool;
+    fn filtered_eq(&self, other: &Self, mask: u64) -> bool;
+    fn func<Vars: VarTuple, E: Expr<Self, Vars>>(
+        f: impl FnOnce<Self::Args<Vars>, Output = Wrap<Self, Vars, E>>,
+    ) -> Wrap<Self, Vars, E> {
+        let args = Self::args::<Vars>();
+        f.call_once(args)
+    }
 }
 
 pub trait VarTuple {
@@ -26,7 +32,7 @@ impl ArgTuple for () {
         ()
     }
     #[inline(always)]
-    fn filtered_eq(&self, _other: &Self, _mask: &[bool]) -> bool {
+    fn filtered_eq(&self, _other: &Self, _mask: u64) -> bool {
         true
     }
 }
@@ -107,10 +113,10 @@ macro_rules! impl_tuple {
                 ),*,)
             }
             #[inline(always)]
-            fn filtered_eq(&self, other: &Self, mask: &[bool]) -> bool {
+            fn filtered_eq(&self, other: &Self, mask: u64) -> bool {
                 let mut ret = true;
                 $(
-                ret &= !mask[$num] || $structname::project_ref(self) == $structname::project_ref(other);
+                ret &= !(mask << $num & 1 != 0) || $structname::project_ref(self) == $structname::project_ref(other);
                 )*
                 ret
             }
@@ -159,5 +165,5 @@ macro_rules! scan_and_map {
     };
 }
 
-scan_and_map!(impl_tuple! impl_lensstruct! (Project0 A 0), (Project1 B 1), (Project2 C 2), (Project3 D 3), (Project4 E 4), (Project5 F 5), (Project6 G 6), (Project7 H 7), (Project8 I 8), (Project9 J 9), (Project10 K 10), (Project11 L 11), (Project12 M 12), (Project13 N 13), (Project14 O 14), (Project15 P 15));
-//scan_and_map!(impl_tuple! impl_lensstruct! (Project0 A 0), (Project1 B 1));
+//scan_and_map!(impl_tuple! impl_lensstruct! (Project0 A 0), (Project1 B 1), (Project2 C 2), (Project3 D 3), (Project4 E 4), (Project5 F 5), (Project6 G 6), (Project7 H 7), (Project8 I 8), (Project9 J 9), (Project10 K 10), (Project11 L 11), (Project12 M 12), (Project13 N 13), (Project14 O 14), (Project15 P 15));
+scan_and_map!(impl_tuple! impl_lensstruct! (Project0 A 0), (Project1 B 1));

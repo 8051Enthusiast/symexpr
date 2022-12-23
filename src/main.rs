@@ -4,14 +4,15 @@ mod int;
 mod jit;
 mod tuples;
 
-use crate::jit::CraneliftModule;
 use expr::prelude::*;
 
+use crate::jit::CraneliftModule;
+
 fn main() {
-    let (number,) = args::<(u32,), _>();
-    let (index, prime) = vars::<(u32, bool), _>();
+    let (index, prime) = <(u32, bool)>::vars();
 
     let is_prime = 
+    <(u32,)>::func(|number|
         when(number.lt(2)).doth(
             false
         ).otherwise(
@@ -26,10 +27,11 @@ fn main() {
                 ),
             )
             .then(prime),
-        ).with_specialization()
-         .arg(number, 5)
-         .build(&mut CraneliftModule::default());
-
+        )
+        .with_specialization()
+        .arg(number, 5)
+        .build(&mut CraneliftModule::default())
+    );
     assert_eq!(is_prime(0), false);
     assert_eq!(is_prime(1), false);
     assert_eq!(is_prime(2), true);

@@ -143,7 +143,7 @@ impl<Sig, Vars, E: Expr<Sig, Vars>> Wrap<Sig, Vars, E> {
     }
     pub fn with_specialization(self) -> SpecializationBuilder<Sig, Vars, E>
     where
-        Sig: CraneliftVars + CraneliftArgs,
+        Sig: CraneliftVars + CraneliftArgs + Copy + Eq,
         Vars: CraneliftVars,
         E: CraneliftableExpr<Sig>,
         E::Output: CraneliftValue,
@@ -206,7 +206,7 @@ impl ExprType {
     pub fn as_cranelift_type(self) -> Option<Type> {
         Some(match self {
             ExprType::Unit => return None,
-            ExprType::Bool => types::B1,
+            ExprType::Bool => types::I8,
             ExprType::I8 | ExprType::U8 => types::I8,
             ExprType::I16 | ExprType::U16 => types::I16,
             ExprType::I32 | ExprType::U32 => types::I32,
@@ -294,7 +294,7 @@ where
         if let Some((x, _)) = ctx
             .specializations
             .as_ref()
-            .filter(|(_, is_set)| is_set[L::POS])
+            .filter(|(_, is_set)| 1 << L::POS & is_set != 0)
         {
             let val = L::project_ref(x).as_cranelift_value(ctx.builder.ins())?;
             let ty = L::Out::ty();
@@ -412,19 +412,11 @@ where
 }
 
 pub mod prelude {
-    use crate::tuples::{ArgTuple, VarTuple};
+    pub use crate::tuples::{ArgTuple, VarTuple};
 
     pub use super::v;
     pub use super::WrapBox;
     use super::*;
     pub use flow::{when, whilst};
     pub use ops::{eq, ge, gt, le, lt, ne};
-    #[inline(always)]
-    pub fn args<Sig: ArgTuple, Vars: VarTuple>() -> Sig::Args<Vars> {
-        Sig::args::<Vars>()
-    }
-    #[inline(always)]
-    pub fn vars<Vars: VarTuple, Sig: ArgTuple>() -> Vars::Vars<Sig> {
-        Vars::vars::<Sig>()
-    }
 }

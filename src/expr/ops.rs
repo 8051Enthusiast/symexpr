@@ -336,7 +336,7 @@ macro_rules! impl_bool_op {
                 ctx.builder.seal_block(right_block);
 
                 let after_block = ctx.builder.create_block();
-                let ret = ctx.builder.append_block_param(after_block, types::B1);
+                let ret = ctx.builder.append_block_param(after_block, types::I8);
                 ctx.builder.ins().jump(after_block, &[left]);
                 ctx.builder.switch_to_block(right_block);
                 let right = self.right.cranelift_eval(ctx).unwrap();

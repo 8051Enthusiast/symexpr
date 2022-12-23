@@ -29,12 +29,12 @@ impl CraneliftValue for () {
 impl CraneliftValue for bool {
     #[inline]
     fn as_cranelift_type() -> Option<Type> {
-        Some(types::B1)
+        Some(types::I8)
     }
 
     #[inline]
     fn as_cranelift_value<'a, B: InstBuilder<'a>>(&self, builder: B) -> Option<Value> {
-        Some(builder.bconst(types::B1, *self))
+        Some(builder.iconst(types::I8, *self as i64))
     }
 }
 
@@ -101,14 +101,14 @@ pub struct CraneliftFunctionCreator<'a, Sig> {
     pub args: Vec<Option<Value>>,
     pub current_types: HashMap<Value, ExprType>,
     pub isa: &'a dyn TargetIsa,
-    pub specializations: Option<(&'a Sig, Vec<bool>)>,
+    pub specializations: Option<(&'a Sig, u64)>,
 }
 
 impl<'a, Sig> CraneliftFunctionCreator<'a, Sig> {
     pub fn from_fun_builder<'b, Vars: CraneliftVars>(
         mut builder: FunctionBuilder<'b>,
         isa: &'b dyn TargetIsa,
-        specializations: Option<(&'b Sig, Vec<bool>)>,
+        specializations: Option<(&'b Sig, u64)>,
     ) -> CraneliftFunctionCreator<'b, Sig>
     where
         Sig: CraneliftArgs,
@@ -183,22 +183,19 @@ pub struct SpecializationBuilder<
     E: Expr<Sig, Vars>,
 > {
     spec: Sig,
-    is_set: Vec<bool>,
+    is_set: u64,
     expr: Wrap<Sig, Vars, E>,
 }
 
-impl<
-        'a,
-        Sig: CraneliftArgs + CraneliftVars,
-        Vars: CraneliftVars,
-        E: CraneliftableExpr<Sig> + Expr<Sig, Vars>,
-    > SpecializationBuilder<Sig, Vars, E>
+impl<'a, Sig, Vars, E> SpecializationBuilder<Sig, Vars, E>
 where
     E::Output: CraneliftValue,
+    Sig: CraneliftArgs + CraneliftVars + Eq + Copy,
+    Vars: CraneliftVars,
+    E: CraneliftableExpr<Sig> + Expr<Sig, Vars>,
 {
     pub(crate) fn from_expr(expr: Wrap<Sig, Vars, E>) -> Self {
-        let len = Sig::as_cranelift_arguments().len();
-        let is_set = vec![false; len];
+        let is_set = 0;
         let spec = Sig::init();
         SpecializationBuilder { spec, is_set, expr }
     }
@@ -208,40 +205,45 @@ where
         Lens::Out: CraneliftValue,
     {
         *Lens::project_mut_ref(&mut self.spec) = v;
-        self.is_set[Lens::POS] = true;
+        self.is_set |= 1 << Lens::POS;
         self
     }
-    pub fn build(self, jit: &mut CraneliftModule) -> SpecializedFunction<Sig, Vars, E> {
+    pub fn build(
+        self,
+        jit: &mut CraneliftModule,
+    ) -> Wrap<Sig, Vars, SpecializedFunction<Sig, Vars, E>> {
         let is_set = self.is_set.clone();
         let jit_fun = jit
             .create_function(&self.expr.inner, Some((&self.spec, self.is_set)))
             .unwrap();
-        SpecializedFunction {
+        let inner = SpecializedFunction {
             jit_fun,
             is_set,
             rust_fun: self.expr,
             spec: self.spec,
-        }
+        };
+        Wrap::new(inner)
     }
 }
 
-pub struct SpecializedFunction<
+#[derive(Clone, Copy)]
+pub struct SpecializedFunction<Sig, Vars, E>
+where
     Sig: CraneliftArgs,
     Vars: CraneliftVars,
     E: CraneliftableExpr<Sig> + Expr<Sig, Vars>,
-> {
+{
     spec: Sig,
-    is_set: Vec<bool>,
+    is_set: u64,
     jit_fun: Sig::Function<E::Output>,
     rust_fun: Wrap<Sig, Vars, E>,
 }
-impl<
-        Sig: std::marker::Tuple + CraneliftArgs,
-        Vars: CraneliftVars,
-        E: CraneliftableExpr<Sig> + Expr<Sig, Vars>,
-    > FnOnce<Sig> for SpecializedFunction<Sig, Vars, E>
+impl<Sig, Vars, E> FnOnce<Sig> for SpecializedFunction<Sig, Vars, E>
 where
     Sig: Eq,
+    Sig: std::marker::Tuple + CraneliftArgs,
+    Vars: CraneliftVars,
+    E: CraneliftableExpr<Sig> + Expr<Sig, Vars>,
 {
     type Output = E::Output;
 
@@ -250,35 +252,48 @@ where
     }
 }
 
-impl<
-        Sig: std::marker::Tuple + CraneliftArgs,
-        Vars: CraneliftVars,
-        E: CraneliftableExpr<Sig> + Expr<Sig, Vars>,
-    > FnMut<Sig> for SpecializedFunction<Sig, Vars, E>
+impl<Sig, Vars, E> FnMut<Sig> for SpecializedFunction<Sig, Vars, E>
 where
     Sig: Eq,
+    Sig: std::marker::Tuple + CraneliftArgs,
+    Vars: CraneliftVars,
+    E: CraneliftableExpr<Sig> + Expr<Sig, Vars>,
 {
     extern "rust-call" fn call_mut(&mut self, args: Sig) -> Self::Output {
         self.call(args)
     }
 }
 
-impl<
-        Sig: std::marker::Tuple + CraneliftArgs,
-        Vars: CraneliftVars,
-        E: CraneliftableExpr<Sig> + Expr<Sig, Vars>,
-    > Fn<Sig> for SpecializedFunction<Sig, Vars, E>
+impl<Sig, Vars, E> Fn<Sig> for SpecializedFunction<Sig, Vars, E>
 where
     Sig: Eq,
+    Sig: std::marker::Tuple + CraneliftArgs,
+    Vars: CraneliftVars,
+    E: CraneliftableExpr<Sig> + Expr<Sig, Vars>,
 {
     extern "rust-call" fn call(&self, args: Sig) -> Self::Output {
-        if args.filtered_eq(&self.spec, &self.is_set) {
+        if args.filtered_eq(&self.spec, self.is_set) {
             self.jit_fun.call(args)
         } else {
             self.rust_fun.eval(&args)
         }
     }
 }
+
+impl<Sig, Vars, IVars, E> Expr<Sig, IVars> for SpecializedFunction<Sig, Vars, E>
+where
+    Sig: Eq + Copy,
+    Sig: std::marker::Tuple + CraneliftArgs,
+    Vars: CraneliftVars,
+    E: CraneliftableExpr<Sig> + Expr<Sig, Vars>,
+{
+    type Output = E::Output;
+
+    fn eval(&self, sig: &Sig, _: &mut IVars) -> Self::Output {
+        self.call(*sig)
+    }
+}
+
 pub struct CraneliftModule {
     functx: FunctionBuilderContext,
     module: JITModule,
@@ -292,7 +307,7 @@ impl CraneliftModule {
     pub fn create_function<Sig, Vars, E>(
         &mut self,
         expr: &E,
-        specializations: Option<(&Sig, Vec<bool>)>,
+        specializations: Option<(&Sig, u64)>,
     ) -> Result<Sig::Function<E::Output>, Box<dyn std::error::Error>>
     where
         Sig: CraneliftArgs,
@@ -301,7 +316,7 @@ impl CraneliftModule {
         E::Output: CraneliftValue,
     {
         self.codegen.clear();
-        let mut fun = &mut self.codegen.func;
+        let fun = &mut self.codegen.func;
         fun.signature = Sig::as_cranelift_signature(CallConv::Fast);
         fun.signature.returns = E::Output::as_cranelift_argument().iter().copied().collect();
         let builder = FunctionBuilder::new(fun, &mut self.functx);
@@ -318,7 +333,7 @@ impl CraneliftModule {
         verify_function(&fun, self.module.isa())?;
         let id = self.module.declare_anonymous_function(&fun.signature)?;
         self.module.define_function(id, &mut self.codegen)?;
-        self.module.finalize_definitions();
+        self.module.finalize_definitions()?;
         let fun = self.module.get_finalized_function(id);
         Ok(unsafe { std::mem::transmute_copy::<_, Sig::Function<E::Output>>(&fun) })
     }
