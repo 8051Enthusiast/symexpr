@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use cranelift::prelude::{types, Type, Value};
 
 use crate::{
-    jit::{
+    cranelift_jit::{
         CraneliftArgs, CraneliftFunctionCreator, CraneliftValue, CraneliftVars, CraneliftableExpr,
         CraneliftableLExpr, SpecializationBuilder,
     },

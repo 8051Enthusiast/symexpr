@@ -1,12 +1,12 @@
 #![feature(unboxed_closures, fn_traits, tuple_trait)]
 pub mod expr;
 mod int;
-mod jit;
+mod cranelift_jit;
 mod tuples;
 
 use expr::prelude::*;
 
-use crate::jit::CraneliftModule;
+use crate::cranelift_jit::CraneliftModule;
 
 fn main() {
     let (index, prime) = <(u32, bool)>::vars();

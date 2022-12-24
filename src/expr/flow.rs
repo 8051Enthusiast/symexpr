@@ -1,6 +1,6 @@
 use cranelift::prelude::{InstBuilder};
 
-use crate::jit::{CraneliftableExpr, CraneliftableLExpr, CraneliftFunctionCreator};
+use crate::cranelift_jit::{CraneliftableExpr, CraneliftableLExpr, CraneliftFunctionCreator};
 
 use super::{AssignExpr, Empty, Expr, VariableValue, Wrap};
 

@@ -5,7 +5,7 @@ use cranelift::prelude::{types, InstBuilder, IntCC};
 use crate::{
     expr::{Expr, ExprType, Wrap},
     int::{Int, UsualArithmeticConverted},
-    jit::{CraneliftFunctionCreator, CraneliftableExpr},
+    cranelift_jit::{CraneliftFunctionCreator, CraneliftableExpr},
 };
 
 use super::ExprValue;
@@ -75,7 +75,7 @@ macro_rules! impl_arithmetic {
         impl<Sig, E: CraneliftableExpr<Sig>, F: CraneliftableExpr<Sig>> CraneliftableExpr<Sig> for $name<E, F> {
             fn cranelift_eval<'a>(
                 &self,
-                ctx: &mut crate::jit::CraneliftFunctionCreator<Sig>,
+                ctx: &mut crate::cranelift_jit::CraneliftFunctionCreator<Sig>,
             ) -> Option<cranelift::prelude::Value> {
                 let lhs = self.left.cranelift_eval(ctx);
                 let rhs = self.right.cranelift_eval(ctx);
@@ -94,7 +94,7 @@ macro_rules! impl_signed_op {
         {
             fn cranelift_eval<'a>(
                 &self,
-                ctx: &mut crate::jit::CraneliftFunctionCreator<Sig>,
+                ctx: &mut crate::cranelift_jit::CraneliftFunctionCreator<Sig>,
             ) -> Option<cranelift::prelude::Value> {
                 let lhs = self.left.cranelift_eval(ctx);
                 let rhs = self.right.cranelift_eval(ctx)?;
@@ -157,7 +157,7 @@ macro_rules! impl_arithmetic_unary {
         impl<Sig, E: CraneliftableExpr<Sig>> CraneliftableExpr<Sig> for $name<E> {
             fn cranelift_eval<'a>(
                 &self,
-                ctx: &mut crate::jit::CraneliftFunctionCreator<Sig>,
+                ctx: &mut crate::cranelift_jit::CraneliftFunctionCreator<Sig>,
             ) -> Option<cranelift::prelude::Value> {
                 let v = self.0.cranelift_eval(ctx);
                 ctx.map_same_typed_value(v, |builder, v| builder.ins().$insname(v))
@@ -233,7 +233,7 @@ macro_rules! impl_cmp_op {
         {
             fn cranelift_eval<'a>(
                 &self,
-                ctx: &mut crate::jit::CraneliftFunctionCreator<Sig>,
+                ctx: &mut crate::cranelift_jit::CraneliftFunctionCreator<Sig>,
             ) -> Option<cranelift::prelude::Value> {
                 let lhs = self.left.cranelift_eval(ctx)?;
                 let rhs = self.right.cranelift_eval(ctx)?;
@@ -249,7 +249,7 @@ macro_rules! impl_cmp_op {
         {
             fn cranelift_eval<'a>(
                 &self,
-                ctx: &mut crate::jit::CraneliftFunctionCreator<Sig>,
+                ctx: &mut crate::cranelift_jit::CraneliftFunctionCreator<Sig>,
             ) -> Option<cranelift::prelude::Value> {
                 let lhs = self.left.cranelift_eval(ctx)?;
                 let rhs = self.right.cranelift_eval(ctx)?;

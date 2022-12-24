@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use cranelift::prelude::*;
 
 use crate::expr::{Arg, Expr, ExprType, Var, VariableValue, Wrap};
-use crate::jit::CraneliftValue;
-use crate::jit::{CraneliftArgs, CraneliftVars};
+use crate::cranelift_jit::CraneliftValue;
+use crate::cranelift_jit::{CraneliftArgs, CraneliftVars};
 
 pub trait ArgTuple: std::marker::Tuple + Sized {
     type Args<Vars: VarTuple>: std::marker::Tuple;
