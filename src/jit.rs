@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 
 use codegen::{
     isa::{CallConv, TargetIsa},
@@ -177,11 +177,12 @@ pub trait CraneliftableLExpr<Sig> {
     ) -> Option<Value>;
 }
 
-pub struct SpecializationBuilder<
+pub struct SpecializationBuilder<Sig, Vars, E>
+where
     Sig: CraneliftArgs + CraneliftVars,
     Vars: CraneliftVars,
     E: Expr<Sig, Vars>,
-> {
+{
     spec: Sig,
     is_set: u64,
     expr: Wrap<Sig, Vars, E>,
@@ -208,10 +209,10 @@ where
         self.is_set |= 1 << Lens::POS;
         self
     }
-    pub fn build(
+    pub fn build<'b>(
         self,
-        jit: &mut CraneliftModule,
-    ) -> Wrap<Sig, Vars, SpecializedFunction<Sig, Vars, E>> {
+        jit: &'b mut CraneliftModule,
+    ) -> Wrap<Sig, Vars, SpecializedFunction<'b, Sig, Vars, E>> {
         let is_set = self.is_set.clone();
         let jit_fun = jit
             .create_function(&self.expr.inner, Some((&self.spec, self.is_set)))
@@ -221,13 +222,14 @@ where
             is_set,
             rust_fun: self.expr,
             spec: self.spec,
+            _phantom: PhantomData,
         };
         Wrap::new(inner)
     }
 }
 
 #[derive(Clone, Copy)]
-pub struct SpecializedFunction<Sig, Vars, E>
+pub struct SpecializedFunction<'a, Sig, Vars, E>
 where
     Sig: CraneliftArgs,
     Vars: CraneliftVars,
@@ -237,8 +239,9 @@ where
     is_set: u64,
     jit_fun: Sig::Function<E::Output>,
     rust_fun: Wrap<Sig, Vars, E>,
+    _phantom: PhantomData<&'a ()>,
 }
-impl<Sig, Vars, E> FnOnce<Sig> for SpecializedFunction<Sig, Vars, E>
+impl<'a, Sig, Vars, E> FnOnce<Sig> for SpecializedFunction<'a, Sig, Vars, E>
 where
     Sig: Eq,
     Sig: std::marker::Tuple + CraneliftArgs,
@@ -252,7 +255,7 @@ where
     }
 }
 
-impl<Sig, Vars, E> FnMut<Sig> for SpecializedFunction<Sig, Vars, E>
+impl<'a, Sig, Vars, E> FnMut<Sig> for SpecializedFunction<'a, Sig, Vars, E>
 where
     Sig: Eq,
     Sig: std::marker::Tuple + CraneliftArgs,
@@ -264,7 +267,7 @@ where
     }
 }
 
-impl<Sig, Vars, E> Fn<Sig> for SpecializedFunction<Sig, Vars, E>
+impl<'a, Sig, Vars, E> Fn<Sig> for SpecializedFunction<'a, Sig, Vars, E>
 where
     Sig: Eq,
     Sig: std::marker::Tuple + CraneliftArgs,
@@ -280,7 +283,7 @@ where
     }
 }
 
-impl<Sig, Vars, IVars, E> Expr<Sig, IVars> for SpecializedFunction<Sig, Vars, E>
+impl<'a, Sig, Vars, IVars, E> Expr<Sig, IVars> for SpecializedFunction<'a, Sig, Vars, E>
 where
     Sig: Eq + Copy,
     Sig: std::marker::Tuple + CraneliftArgs,

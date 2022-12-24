@@ -11,6 +11,8 @@ use crate::jit::CraneliftModule;
 fn main() {
     let (index, prime) = <(u32, bool)>::vars();
 
+    let mut ctx = CraneliftModule::default();
+
     let is_prime = 
     <(u32,)>::func(|number|
         when(number.lt(2)).doth(
@@ -24,13 +26,13 @@ fn main() {
                         prime.set(false)
                     )
                     .then(index.set(index + 1)),
-                ),
+                )
             )
             .then(prime),
         )
         .with_specialization()
         .arg(number, 5)
-        .build(&mut CraneliftModule::default())
+        .build(&mut ctx)
     );
     assert_eq!(is_prime(0), false);
     assert_eq!(is_prime(1), false);
