@@ -7,8 +7,8 @@ use cranelift::prelude::{types, Type, Value};
 
 use crate::{
     jit::{
-        CraneliftArgs, CraneliftFunctionCreator, CraneliftModule, CraneliftValue, CraneliftVars,
-        CraneliftableExpr, CraneliftableLExpr, SpecializationBuilder,
+        CraneliftArgs, CraneliftFunctionCreator, CraneliftValue, CraneliftVars, CraneliftableExpr,
+        CraneliftableLExpr, SpecializationBuilder,
     },
     tuples::{ArgTuple, Project, VarTuple},
 };
@@ -129,19 +129,7 @@ impl<Sig, Vars, E: Expr<Sig, Vars>> Wrap<Sig, Vars, E> {
             _out: PhantomData,
         })
     }
-    pub fn jit(&self, jit: &mut CraneliftModule) -> Sig::Function<E::Output>
-    where
-        Sig: CraneliftArgs,
-        Vars: CraneliftVars,
-        E: CraneliftableExpr<Sig>,
-        E::Output: CraneliftValue,
-    {
-        let fun = jit
-            .create_function(&self.inner, None)
-            .expect("Could not jit");
-        unsafe { std::mem::transmute_copy::<_, Sig::Function<E::Output>>(&fun) }
-    }
-    pub fn with_specialization(self) -> SpecializationBuilder<Sig, Vars, E>
+    pub fn jit(self) -> SpecializationBuilder<Sig, Vars, E>
     where
         Sig: CraneliftVars + CraneliftArgs + Copy + Eq,
         Vars: CraneliftVars,

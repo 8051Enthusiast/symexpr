@@ -30,7 +30,7 @@ fn main() {
             )
             .then(prime),
         )
-        .with_specialization()
+        .jit()
         .arg(number, 5)
         .build(&mut ctx)
     );

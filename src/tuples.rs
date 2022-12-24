@@ -18,7 +18,7 @@ pub trait ArgTuple: std::marker::Tuple + Sized {
     }
 }
 
-pub trait VarTuple {
+pub trait VarTuple: std::marker::Tuple {
     type Vars<Sig: ArgTuple>;
     fn vars<Sig: ArgTuple>() -> Self::Vars<Sig>;
     fn init() -> Self;

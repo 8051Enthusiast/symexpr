@@ -1,4 +1,4 @@
-use std::{collections::HashMap, marker::PhantomData};
+use std::{collections::HashMap, marker::PhantomData, mem::ManuallyDrop};
 
 use codegen::{
     isa::{CallConv, TargetIsa},
@@ -188,7 +188,7 @@ where
     expr: Wrap<Sig, Vars, E>,
 }
 
-impl<'a, Sig, Vars, E> SpecializationBuilder<Sig, Vars, E>
+impl<Sig, Vars, E> SpecializationBuilder<Sig, Vars, E>
 where
     E::Output: CraneliftValue,
     Sig: CraneliftArgs + CraneliftVars + Eq + Copy,
@@ -209,10 +209,10 @@ where
         self.is_set |= 1 << Lens::POS;
         self
     }
-    pub fn build<'b>(
+    pub fn build(
         self,
-        jit: &'b mut CraneliftModule,
-    ) -> Wrap<Sig, Vars, SpecializedFunction<'b, Sig, Vars, E>> {
+        jit: &mut CraneliftModule,
+    ) -> Wrap<Sig, Vars, SpecializedFunction<'_, Sig, Vars, E>> {
         let is_set = self.is_set.clone();
         let jit_fun = jit
             .create_function(&self.expr.inner, Some((&self.spec, self.is_set)))
@@ -299,8 +299,8 @@ where
 
 pub struct CraneliftModule {
     functx: FunctionBuilderContext,
-    module: JITModule,
     codegen: codegen::Context,
+    module: ManuallyDrop<JITModule>,
 }
 
 impl CraneliftModule {
@@ -349,6 +349,8 @@ impl Default for CraneliftModule {
         let mut b = settings::builder();
         b.set("opt_level", "speed")
             .expect("Could not set opimization level");
+        b.set("use_egraphs", "true")
+            .expect("Could not set use_egraphs");
         let mut optimized_isa_settings = isa::lookup(native_isa.triple().clone())
             .expect("Cannot execute JIT on current platform");
         for sett in native_isa.iter() {
@@ -366,7 +368,16 @@ impl Default for CraneliftModule {
         Self {
             functx: FunctionBuilderContext::new(),
             codegen: module.make_context(),
-            module,
+            module: ManuallyDrop::new(module),
+        }
+    }
+}
+
+impl Drop for CraneliftModule {
+    fn drop(&mut self) {
+        unsafe {
+            let module = ManuallyDrop::take(&mut self.module);
+            module.free_memory()
         }
     }
 }
